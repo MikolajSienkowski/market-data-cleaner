@@ -1,6 +1,7 @@
 Financial Data Quality Engine: Automated Outlier Detection
 
 Project Overview
+
 A quantitative data cleaning pipeline designed to ingest high-frequency market data (TSLA), detect "bad ticks" (erroneous price spikes), and reconstruct accurate pricing metrics. This project mimics the data integrity operations performed by market data providers like **LSEG (Refinitiv)** or **Bloomberg**.
 
 Objective
