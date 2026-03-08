@@ -14,7 +14,7 @@ Tech Stack
 * **Monte Carlo Simulation:** Statistical stress-testing.
 
 Key Results (1,000 Iteration Stress Test)
-I ran a Monte Carlo simulation infusing random 99% price drops ("fat finger" errors) into real TSLA minute-level data.
+I ran a Monte Carlo simulation infusing random ~99% price changes ("fat finger" errors) into real TSLA minute-level data.
 
 | Metric | Result |
 | :--- | :--- |
