@@ -7,13 +7,14 @@ TICKER = 'TSLA'
 
 Z_THRESHOLD = 3
 ITERATIONS = 1000
+ERROR = (0.01, 0.02, 0.03, 0.04, 0.05, 1.95, 1.96, 1.97, 1.98, 1.99)
 
 def get_data(ticker=TICKER, interval=INTERVAL):
     df = yf.download(tickers=ticker, interval=interval, period='max')
     df.columns = df.columns.get_level_values(0)
     return df
 
-def infuse_error(df):
+def infuse_error(df, error=ERROR):
     # We seperate first 100 rows to make sure they remain 'clean'. This will make calculations easier
     # and more realistic, we have some previous data that we can use for calculations
     df_start = df.iloc[:100].copy()
@@ -21,7 +22,7 @@ def infuse_error(df):
 
     # Infusing our minutely data for TSLA with 'bad ticks'
     random_indices = np.random.choice(df_rest.index, 50)
-    df_rest.loc[random_indices, 'Close'] = df_rest.loc[random_indices, 'Close'] * 0.01
+    df_rest.loc[random_indices, 'Close'] = df_rest.loc[random_indices, 'Close'] * np.random.choice(error)
     df_dirty_data = pd.concat([df_start, df_rest])
     return df.dropna(), df_dirty_data.dropna()
 
@@ -78,12 +79,14 @@ def main(n_iterations=ITERATIONS):
     print(f'Running {n_iterations} iterations...')
 
     for n in range(n_iterations):
-        df, df_dirty_data = infuse_error(df)
+        df, df_dirty_data = infuse_error(df.copy())
         df_dirty_data, df_clean_data = cleaning_data(df_dirty_data)
         df, df_clean_data, df_dirty_data, error_clean, error_dirty, improvement = evaluate_model_performance(df, df_clean_data, df_dirty_data)
         results['dirty_errors'].append(error_dirty)
         results['clean_errors'].append(error_clean)
         results['improvements'].append(improvement)
+        if (n + 1) % 100 == 0:
+            print(f"Completed {n + 1}/{n_iterations} runs...")
 
     avg_dirty_error = np.mean(results['dirty_errors'])
     avg_clean_error = np.mean(results['clean_errors'])
