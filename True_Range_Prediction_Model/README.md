@@ -25,7 +25,10 @@ The model was tested on unseen, out-of-sample data covering major volatility eve
 | **Beta** | 0.50 | 1.00 |
 | **Alpha** | **+1.50%** | 0.00% |
 
-![Strategy Performance vs Benchmark](images\performance_chart.png)
+**Strategy Performance**:
+
+<img width="640" height="480" alt="performance_chart" src="https://github.com/user-attachments/assets/0fc55a82-12ee-427c-aa43-7aeb0dd1928e" />
+
 
 *Conclusion:* The strategy sacrifices roughly 25% of absolute return to eliminate nearly **50% of the portfolio's risk (volatility and drawdown)**, resulting in superior risk-adjusted returns (Sharpe/Sortino) and positive Alpha. 
 
