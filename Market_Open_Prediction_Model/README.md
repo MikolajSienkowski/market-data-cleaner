@@ -1,4 +1,4 @@
-# Market Open Prediction Model: Cross-Asset Momentum
+# Monday Open Prediction Model: Cross-Asset Momentum
 
 ## Overview
 This quantitative research project explores cross-asset momentum by predicting the S&P 500 (SPY) Monday morning opening gap using Bitcoin (BTC) weekend price action. 
