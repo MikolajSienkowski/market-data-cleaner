@@ -29,7 +29,7 @@ def add_feature_and_target(df, btc):
 
     df['Mean of Target'] = df['Target'].mean()
 
-    df = pd.concat([df, btc], axis=1).dropna()
+    df = pd.concat([df, btc[['Feature']]], axis=1).dropna()
 
     return df
 
