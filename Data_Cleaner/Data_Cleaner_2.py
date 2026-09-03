@@ -24,7 +24,7 @@ def infuse_error(df, error=ERROR):
 
     # Infusing our minutely data for TSLA with 'bad ticks'
     random_indices = np.random.choice(df_rest.index, 50)
-    df_rest.loc[random_indices, 'Close'] = df_rest.loc[random_indices, 'Close'] * np.random.choice(error)
+    df_rest.loc[random_indices, 'Close'] = df_rest.loc[random_indices, 'Close'] * np.random.choice(error, 50)
     df_dirty_data = pd.concat([df_start, df_rest])
 
     return df.dropna(), df_dirty_data.dropna()
@@ -32,45 +32,47 @@ def infuse_error(df, error=ERROR):
 def cleaning_data(df_dirty_data, z_threshold=Z_THRESHOLD):
     # I use Z-score to detect outliers and clean the data
     df_dirty_data['Price Change'] = df_dirty_data['Close'].pct_change()
-    mu = df_dirty_data['Price Change'].rolling(20).mean()
-    sigma = df_dirty_data['Price Change'].rolling(20).std()
-    zscore = (df_dirty_data['Price Change'] - mu) / sigma
-    df_dirty_data['Error'] = np.where(zscore.abs() > z_threshold, 1, 0)
-    df_clean_data = df_dirty_data[df_dirty_data['Error'] == 0].copy()
+    df_dirty_data2 = df_dirty_data.copy()
+    for n in range(1, 5):
+        mu = df_dirty_data2['Price Change'].rolling(20).mean()
+        sigma = df_dirty_data2['Price Change'].rolling(20).std()
+        zscore = (df_dirty_data2['Price Change'] - mu) / sigma
+        df_dirty_data2['Error'] = np.where(zscore.abs() > z_threshold, 1, 0)
+        df_dirty_data2 = df_dirty_data2[df_dirty_data2['Error'] == 0].copy()
+        df_clean_data = df_dirty_data2[df_dirty_data2['Error'] == 0].copy()
+
+    for dataset in [df_dirty_data, df_clean_data]:
+        dataset['Volume'] = dataset['Volume'].replace(0, np.nan).ffill()
 
     return df_dirty_data.dropna(), df_clean_data
+
+def calculate_vwap(vwap):
+    date_group = vwap.index.normalize()
+    vwap['Volume x Price'] = vwap['Close'] * vwap['Volume']
+    vwap['VxP Sum'] = vwap.groupby(date_group)['Volume x Price'].transform('sum')
+    vwap['Volume Sum'] = vwap.groupby(date_group)['Volume'].transform('sum')
+    vwap['Fair Value'] = vwap['VxP Sum'] / vwap['Volume Sum']
+    vwap_ = vwap['Fair Value'].mean()
+
+    return vwap_
 
 def evaluate_model_performance(df, df_clean_data, df_dirty_data):
     # I created a Volume-Weighted Average Price Indicator to determine fair value of TSLA
     # ---Original Data---
-    df['Volume x Price'] = df['Close'] * df['Volume']
-    df['VxP Sum'] = df.groupby(df.index.normalize())['Volume x Price'].transform('sum')
-    df['Volume Sum'] = df.groupby(df.index.normalize())['Volume'].transform('sum')
-    df['Fair Value'] = df['VxP Sum'] / df['Volume Sum']
-    org_vwap = df['Fair Value'].mean()
+    org_vwap = calculate_vwap(df)
 
     # ---Dirty Data---
-    df_dirty_data['Volume'] = df_dirty_data['Volume'].replace(0, np.nan).ffill()
-    df_dirty_data['Volume x Price'] = df_dirty_data['Close'] * df_dirty_data['Volume']
-    df_dirty_data['VxP Sum'] = df_dirty_data.groupby(df_dirty_data.index.normalize())['Volume x Price'].transform('sum')
-    df_dirty_data['Volume Sum'] = df_dirty_data.groupby(df_dirty_data.index.normalize())['Volume'].transform('sum')
-    df_dirty_data['Fair Value'] = df_dirty_data['VxP Sum'] / df_dirty_data['Volume Sum']
-    dirty_vwap = df_dirty_data['Fair Value'].mean()
+    dirty_vwap = calculate_vwap(df_dirty_data)
 
     # ---Clean Data---
-    df_clean_data['Volume'] = df_clean_data['Volume'].replace(0, np.nan).ffill()
-    df_clean_data['Volume x Price'] = df_clean_data['Close'] * df_clean_data['Volume']
-    df_clean_data['VxP Sum'] = df_clean_data.groupby(df_clean_data.index.normalize())['Volume x Price'].transform('sum')
-    df_clean_data['Volume Sum'] = df_clean_data.groupby(df_clean_data.index.normalize())['Volume'].transform('sum')
-    df_clean_data['Fair Value'] = df_clean_data['VxP Sum'] / df_clean_data['Volume Sum']
-    clean_vwap = df_clean_data['Fair Value'].mean()
+    clean_vwap = calculate_vwap(df_clean_data)
 
     # How much does the model improve our data?
     error_dirty = abs((org_vwap - dirty_vwap) / org_vwap) * 100
     error_clean = abs((org_vwap - clean_vwap) / org_vwap) * 100
     improvement = error_dirty - error_clean
 
-    return df, df_clean_data, df_dirty_data, error_clean, error_dirty, improvement
+    return error_clean, error_dirty, improvement
 
 def main(n_iterations=ITERATIONS):
     df = get_data()
@@ -84,7 +86,7 @@ def main(n_iterations=ITERATIONS):
     for n in tqdm(range(n_iterations), desc='Progress', unit='simulations'):
         df, df_dirty_data = infuse_error(df.copy())
         df_dirty_data, df_clean_data = cleaning_data(df_dirty_data)
-        df, df_clean_data, df_dirty_data, error_clean, error_dirty, improvement = evaluate_model_performance(df, df_clean_data, df_dirty_data)
+        error_clean, error_dirty, improvement = evaluate_model_performance(df.copy(), df_clean_data.copy(), df_dirty_data.copy())
         results['dirty_errors'].append(error_dirty)
         results['clean_errors'].append(error_clean)
         results['improvements'].append(improvement)
@@ -101,6 +103,7 @@ def main(n_iterations=ITERATIONS):
     print(f'Worst Case Improvement:   {np.min(results["improvements"]):.4f}%')
     print(f'Best Case Improvement:    {np.max(results["improvements"]):.4f}%')
 
-    return df, df_clean_data, df_dirty_data
+    return
 
-main()
+if __name__ == '__main__':
+    main()

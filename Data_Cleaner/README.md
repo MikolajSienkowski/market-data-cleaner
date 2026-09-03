@@ -16,11 +16,16 @@ The algorithm was subjected to a 1,000-iteration Monte Carlo stress test, inject
 
 | Metric | Result |
 | :--- | :--- |
-| **Original Error** | 2.51% (Average deviation from true VWAP) |
-| **Cleaned Error** | 1.14% (Error after running algorithm) |
-| **Improvement** | **54.3% reduction in pricing error** |
+| **Average Dirty Data Error** | 0.3112% (Average deviation from true VWAP) |
+| **Average Cleaned Data Error** | 0.0355% (Deviation after running algorithm) |
+| **Average Improvement** | **+0.2757 percentage points recovered** |
+| **Relative Error Reduction** | **~88.6% reduction in pricing error** |
+| **Best Case Improvement** | +1.5899% |
+| **Worst Case Improvement** | -0.2675% |
 
-*Conclusion:* The outlier detection algorithm successfully eliminated over half of the synthetic pricing errors. For quantitative strategies running on high-frequency data, reducing VWAP deviation by 54% represents a massive reduction in false trading signals and execution slippage.
+*Conclusion:* The recursive outlier detection engine successfully eliminated **88.6%** of synthetic pricing deviation across 1,000 randomized market regimes. 
+
+*Edge Case Analysis:* In rare simulations where opposing price shocks naturally balanced out, aggressive tick removal resulted in minor negative recovery (-0.27%). Recognizing and documenting this trade-off between noise cancellation and volatility pruning is critical for calibrating threshold sensitivity in live execution engines.
 
 ## Tech Stack
 * **Python** (Core logic and simulation control)
@@ -30,5 +35,5 @@ The algorithm was subjected to a 1,000-iteration Monte Carlo stress test, inject
 
 ## How to Run
 1. Clone the repository.
-2. Install the required packages: `pip install pandas numpy yfinance`
+2. Install the required packages: `pip install pandas numpy yfinance tqdm`
 3. Run the main pipeline: `python main.py`
