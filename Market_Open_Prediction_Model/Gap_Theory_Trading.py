@@ -4,17 +4,19 @@ import pandas as pd
 from Monday_Open_Prediction_Model import main
 
 LEVERAGE = 1
+GAP = 0.25
 
-def add_strategy(df_org, next_prediction, leverage=LEVERAGE):
+def add_strategy(df_org, next_prediction, leverage=LEVERAGE, gap=GAP):
     # Assign the Prediction column for easier use and slice the DataFrame accordingly to next_prediciton variable
     df = df_org
+    next_prediction.index = next_prediction.index + pd.Timedelta(days=1) # fix the dates (we move our predictions from Sunday to Monday)
     start_date = next_prediction.index[0]
     df = df.loc[start_date:].copy()
     df['Prediction'] = next_prediction * 100
     df['Prediction'] = df['Prediction'].ffill()
 
-    # Trade against the Gap Theory logic - the gap starts a weekly trend
-    df['Strategy'] = np.where(df['Prediction'] > 0.25, leverage, np.where(df['Prediction'] < -0.25, -leverage, 0))
+    # Trade with the Gap Theory logic - the gap will be closed (reversed)
+    df['Strategy'] = np.where(df['Prediction'] > gap, -leverage, np.where(df['Prediction'] < -gap, leverage, 0))
     df['Strategy'] = df['Strategy'].shift(1)
 
     return df.dropna(), start_date
@@ -22,8 +24,9 @@ def add_strategy(df_org, next_prediction, leverage=LEVERAGE):
 def test_strategy(df):
     # Make a Daily Return column that assumes we hold the trade from Monday Open to Friday Close
     df['Daily Return'] = df['Close'].pct_change()
-    monday_filter = df.index.dayofweek == 0
-    df.loc[monday_filter, 'Daily Return'] = (df['Close'] - df['Open']) / df['Open']
+    first_days = df.groupby(pd.Grouper(freq='W')).head(1).index
+    df.loc[first_days, 'Daily Return'] = (df.loc[first_days, 'Close'] - df.loc[first_days, 'Open']) / df.loc[
+        first_days, 'Open']
 
     df['Strategy Returns'] = (1 + df['Daily Return'] * df['Strategy']).cumprod()
     df['Benchmark Returns'] = (1 + df['Close'].pct_change()).cumprod()
@@ -34,9 +37,9 @@ def test_strategy(df):
     plt.legend(['Strategy Returns', 'Benchmark Returns'])
     plt.show()
 
-    return df, monday_filter
+    return df
 
-def evaluate_performance(df, monday_filter, start_date):
+def evaluate_performance(df):
     # Total Returns
     s_ret = df['Strategy Returns'].iloc[-1] - 1
     b_ret = df['Benchmark Returns'].iloc[-1] - 1
@@ -48,16 +51,23 @@ def evaluate_performance(df, monday_filter, start_date):
     b_max_drawdown = ((df['Benchmark Returns'] / b_running_max) - 1).min()
 
     # Win Rate
-    df['Weekly Returns'] = (df['Close'].shift(-4) - df['Open']) / df['Open']
-    df['Trade Returns'] = df['Weekly Returns'] * df['Strategy']
-    trades = df[monday_filter & (df['Strategy'] != 0)]
-    benchmark = df[monday_filter]
+    weekly_df = df.groupby(pd.Grouper(freq='W')).agg(
+        Open=('Open', 'first'),
+        Close=('Close', 'last'),
+        Strategy=('Strategy', 'first')
+    ).dropna()
+
+    weekly_df['Weekly Returns'] = (weekly_df['Close'] - weekly_df['Open']) / weekly_df['Open']
+    weekly_df['Trade Returns'] = weekly_df['Weekly Returns'] * weekly_df['Strategy']
+
+    trades = weekly_df[weekly_df['Strategy'] != 0]
+    benchmark = weekly_df
 
     n_trades = len(trades)
     s_w = len(trades[trades['Trade Returns'] > 0])
     s_wr = s_w / n_trades if n_trades > 0 else 0
 
-    n_weeks = int(len(df) / 5)
+    n_weeks = len(benchmark)
     b_w = len(benchmark[benchmark['Weekly Returns'] > 0])
     b_wr = b_w / n_weeks if n_weeks > 0 else 0
 
@@ -114,10 +124,10 @@ def evaluate_performance(df, monday_filter, start_date):
     return df
 
 def main_gtt():
-    next_prediction, df_org = main()
+    next_prediction, df_org = main(verbose=False)
     df, start_date = add_strategy(df_org, next_prediction)
-    df, monday_filter = test_strategy(df)
-    df = evaluate_performance(df, monday_filter, start_date)
+    df = test_strategy(df)
+    df = evaluate_performance(df)
 
     return df
 
