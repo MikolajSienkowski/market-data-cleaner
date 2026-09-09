@@ -3,14 +3,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from True_Range_Prediction_Model import main
 
-TICKER = 'SPY'
 CAPITAL = 10000
 TARGET_RISK_PCT = 0.01
 RISK_FREE_RATE = 0.04
-LEVERAGE = 1
+LOW_VOLATILITY_LEVERAGE = 1.5
 
-def portfolio_dynamic_sizing(df, next_prediction, split, capital=CAPITAL, target_risk_pct=TARGET_RISK_PCT):
-    df = df.iloc[split:].copy()
+def portfolio_dynamic_sizing(df, next_prediction, capital=CAPITAL, target_risk_pct=TARGET_RISK_PCT):
+    start_date = next_prediction.index[0]
+    df = df.loc[start_date:].copy()
     target_dollar_risk = capital * target_risk_pct
     df['Target Capital'] = target_dollar_risk / next_prediction
     df['Target Capital'] = df['Target Capital'].clip(upper=CAPITAL)
@@ -23,39 +23,69 @@ def portfolio_dynamic_sizing(df, next_prediction, split, capital=CAPITAL, target
 
     return df
 
-def test_strategy(df, capital=CAPITAL, leverage=LEVERAGE):
-    df['Close Change'] = df['Close'].pct_change()
+def test_strategy(df, ticker, capital=CAPITAL, risk_free_rate=RISK_FREE_RATE, leverage=LOW_VOLATILITY_LEVERAGE):
+    # Calculate the position weights
     df['Weight'] = df['Target Capital'] / capital
     df['Weight'] = df['Weight'].shift(1)
-    df['Weighted Position'] = df['Weight'] * df['Close Change'] * leverage
-    df['Strategy Returns'] = capital * (1 + df['Weighted Position']).cumprod()
+
+    df['Exposure'] = np.where(df['Weight'] == 1, leverage, df['Weight'])
+    df['Free Capital Weight'] = 1 - df['Exposure']
+
+    ''' We calculate our exposure if we allocate full capital we take advantage of low volatility
+         using 1.5x leverage. '''
+
+    # Calculate transaction costs
+    base_commission = 0.00005
+    baseline_vix = 15
+    baseline_slippage = 0.00005
+    dynamic_slippage = baseline_slippage * (df['VIX Close'] / baseline_vix)
+
+    df['Friction Rate'] = base_commission + dynamic_slippage
+    df['Turnover'] = df['Exposure'].diff().abs()
+    df['Friction'] = df['Turnover'] * df['Friction Rate']
+
+    # Calculate the position we take (SPY + ST-TBILLS)
+    df['Close Change'] = df['Close'].pct_change()
+    df['Weighted Position'] = df['Exposure'] * df['Close Change']
+    df['Free Capital Position'] = df['Free Capital Weight'] * (risk_free_rate / 252)
+    df['Position'] = df['Weighted Position'] + df['Free Capital Position'] - df['Friction']
+
+    # Calculate and plot the results
+    df['Strategy Returns'] = capital * (1 + df['Position']).cumprod()
     df['Benchmark Returns'] = capital * (1 + df['Close Change']).cumprod()
 
     plt.plot(df['Benchmark Returns'])
     plt.plot(df['Strategy Returns'])
     plt.legend(['Benchmark Returns', 'Strategy Returns'])
     plt.ylabel('Growth of $10,000')
-    plt.title('SPY vs. Dynamic Sizing Portfolio')
+    plt.title(f'{ticker} vs. Dynamic Sizing Portfolio')
     plt.show()
 
-    return df
+    return df.dropna()
 
 def evaluate_strategy(df, risk_free_rate=RISK_FREE_RATE):
     # Sharpe Ratio
-    annualized_portfolio_returns = df['Weighted Position'].mean() * 252
-    p_std = df['Weighted Position'].std() * np.sqrt(252)
+    years = len(df) / 252
+
+    p_final = df['Strategy Returns'].iloc[-1]
+    p_initial = df['Strategy Returns'].iloc[0]
+    annualized_portfolio_returns = (p_final / p_initial) ** (1 / years) - 1
+
+    p_std = df['Position'].std() * np.sqrt(252)
     p_sharpe_ratio = (annualized_portfolio_returns - risk_free_rate) / p_std
-    annualized_benchmark_returns = df['Close Change'].mean() * 252
+
+    b_final = df['Benchmark Returns'].iloc[-1]
+    b_initial = df['Benchmark Returns'].iloc[0]
+    annualized_benchmark_returns = (b_final / b_initial) ** (1 / years) - 1
+
     b_std = df['Close Change'].std() * np.sqrt(252)
     b_sharpe_ratio = (annualized_benchmark_returns - risk_free_rate) / b_std
 
     # Sortino Ratio
-    p_downside_variation = df['Weighted Position'].loc[df['Weighted Position'] < 0]
-    p_downside_std = p_downside_variation.std() * np.sqrt(252)
-    p_sortino_ratio = (annualized_portfolio_returns - risk_free_rate) / p_downside_std
-    b_downside_variation = df['Close Change'].loc[df['Close Change'] < 0]
-    b_downside_std = b_downside_variation.std() * np.sqrt(252)
-    b_sortino_ratio = (annualized_benchmark_returns - risk_free_rate) / b_downside_std
+    p_downside_deviation = np.sqrt(np.mean(np.minimum(0, df['Position'].dropna()) ** 2)) * np.sqrt(252)
+    p_sortino_ratio = (annualized_portfolio_returns - risk_free_rate) / p_downside_deviation
+    b_downside_deviation = np.sqrt(np.mean(np.minimum(0, df['Close Change'].dropna()) ** 2)) * np.sqrt(252)
+    b_sortino_ratio = (annualized_benchmark_returns - risk_free_rate) / b_downside_deviation
 
     # Max Drawdown
     p_running_max = df['Strategy Returns'].cummax()
@@ -68,7 +98,7 @@ def evaluate_strategy(df, risk_free_rate=RISK_FREE_RATE):
     b_calmar_ratio = annualized_benchmark_returns / abs(b_max_drawdown)
 
     # Beta
-    portfolio_returns = df['Weighted Position'].dropna()
+    portfolio_returns = df['Position'].dropna()
     benchmark_returns = df['Close Change'].dropna()
 
     common_index = benchmark_returns.index.intersection(portfolio_returns.index)
@@ -85,11 +115,8 @@ def evaluate_strategy(df, risk_free_rate=RISK_FREE_RATE):
     alpha = annualized_portfolio_returns - (risk_free_rate + beta * (annualized_benchmark_returns - risk_free_rate))
 
     # Daily VaR
-    daily_p_std = df['Weighted Position'].std()
-    daily_b_std = df['Close Change'].std()
-
-    p_var = 2.33 * daily_p_std
-    b_var = 2.33 * daily_b_std
+    p_var = abs(np.percentile(df['Position'].dropna(), 1))
+    b_var = abs(np.percentile(df['Close Change'].dropna(), 1))
 
     # Results Table
     metrics_data = {
@@ -140,9 +167,9 @@ def evaluate_strategy(df, risk_free_rate=RISK_FREE_RATE):
     return
 
 def main_dps():
-    df, next_prediction, split = main()
-    df = portfolio_dynamic_sizing(df, next_prediction, split)
-    df = test_strategy(df)
+    df, next_prediction, ticker = main(verbose=False)
+    df = portfolio_dynamic_sizing(df, next_prediction)
+    df = test_strategy(df, ticker)
     evaluate_strategy(df)
 
     return df
