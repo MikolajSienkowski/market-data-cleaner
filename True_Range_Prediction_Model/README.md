@@ -33,7 +33,7 @@ By aggressively suppressing the Nasdaq's structural volatility, the model comple
 | **Alpha** | **+4.48%** | 0.00% |
 
 **QQQ Strategy Performance**:
-<img width="640" height="480" alt="performance_chart_QQQ" src="https://github.com/user-attachments/assets/performance_chart_QQQ.png" />
+<img width="640" height="480" alt="performance_chart_QQQ" src="images/performance_chart_QQQ.png" />
 
 ---
 
@@ -51,7 +51,7 @@ On the S&P 500, the strategy sacrifices a small margin of absolute return to bui
 | **Alpha** | **+1.49%** | 0.00% |
 
 **SPY Strategy Performance**:
-<img width="640" height="480" alt="performance_chart_SPY" src="https://github.com/user-attachments/assets/performance_chart_SPY.png" />
+<img width="640" height="480" alt="performance_chart_SPY" src="images/performance_chart_SPY.png" />
 
 ## Tech Stack
 * **Python** (pandas, numpy)
